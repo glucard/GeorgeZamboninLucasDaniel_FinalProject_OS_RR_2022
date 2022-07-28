@@ -6,16 +6,55 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
 
-#define MAX 122
+#define die(e) do { fprintf(stderr, "%s", e); exit(EXIT_FAILURE); } while (0);
+
+#define MAX 256
 #define SA struct sockaddr
+
+typedef struct subprocess_t {
+	pid_t pid;
+	int supplyfd;
+} subprocess_t;
+
+subprocess_t subprocess(const char *command, char* output) {
+	int fds[2];
+    int fds_out[2];
+
+	pipe(fds);
+    pipe(fds_out);
+	subprocess_t process = { fork(), fds[1] };
+	if (process.pid == 0) {
+        close(fds_out[0]);
+        dup2(fds_out[1], STDOUT_FILENO);
+        close(fds_out[1]);
+		dup2(fds[0], STDIN_FILENO);
+        close(fds[0]);
+		char *argv[] = {"/bin/sh", "-c", (char*) command, NULL};
+		execvp(argv[0], argv);
+        printf("execvp error...\n");
+		exit(1);
+	}
+    close(fds_out[1]);
+
+    bzero(output, MAX);
+    int status;
+    int nbytes = read(fds_out[0], output, sizeof(output));
+    int i, last_enter_pos = 0;
+    for (i = 0; output[i] != '\0'; i++);
+    printf("%d length\n, ", i);
+	close(fds[0]);
+	return process;
+}
 
 typedef struct pipesc {
     char** commands;
     int length;
-} Pipesc;
+} pipesc;
 
-Pipesc* splitPipes(char* command) {
+pipesc* splitPipes(char* command) {
 
     char** all_commands = (char**)malloc(sizeof(char*));
 
@@ -25,12 +64,11 @@ Pipesc* splitPipes(char* command) {
     i = 0;
     while(n < MAX){
         all_commands = (char**)realloc(all_commands, (i+1)*sizeof(char*));
-        all_commands[i] = (char*)malloc(122 * sizeof(char));
+        all_commands[i] = (char*)malloc(MAX * sizeof(char));
         bzero(all_commands[i], MAX);
 
-        printf("n: %d\n", n);
         for (j = 0; j < MAX; j++) {
-            if (command[n] == '|' || n == MAX){
+            if (command[n] == '[' || n == MAX){
                 n++;
                 break;
             }
@@ -39,14 +77,14 @@ Pipesc* splitPipes(char* command) {
         i++;
     }
 
-    Pipesc* p = (Pipesc*)malloc(sizeof(Pipesc));
+    pipesc* p = (pipesc*)malloc(sizeof(pipesc));
     p->commands = all_commands;
     p->length = i;
 
     return p;
 }
 
-void destroyPipesc(Pipesc* p){
+void destroyPipesc(pipesc* p){
     int i;
     for (i = 0; i < p->length; i++) {
         free(p->commands[i]);
@@ -55,47 +93,66 @@ void destroyPipesc(Pipesc* p){
     free(p);
 }
 
+void executePipes(pipesc* p) {
+	int status;
+    char output[4096];
+	if (p->length > 0) {
+		subprocess_t sp[p->length];
+		sp[0] = subprocess(p->commands[0], output);
+		
+		int i = 1;
+		for (; i < p->length; i++){
+			int next_next_supply_fd;
+			sp[i] = subprocess(p->commands[i], output);
+			close(sp[i-1].supplyfd);
+            dprintf(sp->supplyfd, "%s", output);
+			pid_t pid = waitpid(sp[i-1].pid, &status, 0);
+		}
+		close(sp[i-1].supplyfd);
+		pid_t pid = waitpid(sp[i-1].pid, &status, 0);
+	}
+    printf("Shell: %s\n", output);
+}
+
 void executeCommands(char* command){
-    Pipesc* p = splitPipes(command);
-    
-    int i;
-    for (i = 0; i < p->length; i++){
-        printf("p[%d]: %s", i, p->commands[i]);
-        continue;
-    }
+    pipesc* p = splitPipes(command);
+    executePipes(p);
 
     destroyPipesc(p);
 }
 
 void func(int connfd){
     char buff[MAX];
-    int n;
+    int n = 0;
 
     for(;;){
         bzero(buff, MAX);
-
         read(connfd, buff, sizeof(buff));
-
-        printf("From client: %s", buff);
-        executeCommands(buff);
-
-        bzero(buff, MAX);
-        //n = 0;
-        //while ((buff[n++] = getchar()) != '\n');
-        
-        //write(connfd, buff, sizeof(buff));
+        printf("From client: %s\n", buff);
         
         if(strncmp("exit", buff, 4) == 0){
             printf("Closing server...\n");
             break;
         }
+        executeCommands(buff);
     }
 }
 
-int main(){
+int main(int argsc, char **argsv){
     int sockfd, connfd, len, port;
     struct sockaddr_in servaddr, cli;
     port = 8080;
+
+    int argsv_i = 1; // ignore ./filename
+    if(argsc > 2){
+        while(argsv_i < argsc){
+            if (strcmp(argsv[argsv_i], "--port") == 0) {
+                port = atoi(argsv[++argsv_i]);
+                continue;
+            }
+            argsv_i++;
+        }
+    }
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1){

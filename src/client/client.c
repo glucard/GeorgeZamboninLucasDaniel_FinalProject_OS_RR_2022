@@ -6,13 +6,13 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <time.h>
 
-#define MAX 80
+#define MAX 256
 #define SA struct sockaddr
 
 int is_log = 0;
 char log_filename[MAX];
-#include <time.h>
 
 void logger(char* s){
     if (is_log) {
@@ -32,15 +32,13 @@ void func(int sockfd)
     for (;;) {
         bzero(buff, sizeof(buff));
         printf("Enter the string: ");
-        n = 0;
-        bzero(buff, sizeof(buff));
 
+        n = 0;
         while ((buff[n++] = getchar()) != '\n');
         
-        logger(buff);
         write(sockfd, buff, sizeof(buff));
-        // read(sockfd, buff, sizeof(buff));
-        // printf("From Server : %s", buff);
+        // logger(buff);
+        
         if ((strncmp(buff, "exit", 4)) == 0) {
             printf("Client Exit...\n");
             break;
@@ -51,8 +49,8 @@ void func(int sockfd)
 
 int main(int argsc, char **argsv)
 {
-    int sockfd, connfd, port = 8080;
-    struct sockaddr_in servaddr, cli;
+    int sockfd, port = 8080;
+    struct sockaddr_in servaddr;
 
     int argsv_i = 1; // ignore ./filename
     if(argsc > 2){
