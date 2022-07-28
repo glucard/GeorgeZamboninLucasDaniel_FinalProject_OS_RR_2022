@@ -7,8 +7,65 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define MAX 80
+#define MAX 122
 #define SA struct sockaddr
+
+typedef struct pipesc {
+    char** commands;
+    int length;
+} Pipesc;
+
+Pipesc* splitPipes(char* command) {
+
+    char** all_commands = (char**)malloc(sizeof(char*));
+
+    int i, j, n;
+
+    n = 0;
+    i = 0;
+    while(n < MAX){
+        all_commands = (char**)realloc(all_commands, (i+1)*sizeof(char*));
+        all_commands[i] = (char*)malloc(122 * sizeof(char));
+        bzero(all_commands[i], MAX);
+
+        printf("n: %d\n", n);
+        for (j = 0; j < MAX; j++) {
+            if (command[n] == '|' || n == MAX){
+                n++;
+                break;
+            }
+            all_commands[i][j] = command[n++];
+        }
+        i++;
+    }
+
+    Pipesc* p = (Pipesc*)malloc(sizeof(Pipesc));
+    p->commands = all_commands;
+    p->length = i;
+
+    return p;
+}
+
+void destroyPipesc(Pipesc* p){
+    int i;
+    for (i = 0; i < p->length; i++) {
+        free(p->commands[i]);
+    }
+    free(p->commands);
+    free(p);
+}
+
+void executeCommands(char* command){
+    Pipesc* p = splitPipes(command);
+    
+    int i;
+    for (i = 0; i < p->length; i++){
+        printf("p[%d]: %s", i, p->commands[i]);
+        continue;
+    }
+
+    destroyPipesc(p);
+}
 
 void func(int connfd){
     char buff[MAX];
@@ -19,8 +76,9 @@ void func(int connfd){
 
         read(connfd, buff, sizeof(buff));
 
-        printf("Connfd: %d From client: %s", connfd, buff);
-        
+        printf("From client: %s", buff);
+        executeCommands(buff);
+
         bzero(buff, MAX);
         //n = 0;
         //while ((buff[n++] = getchar()) != '\n');
