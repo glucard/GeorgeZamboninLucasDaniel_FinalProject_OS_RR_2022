@@ -1,2 +1,3 @@
-/src/.vscode/
+/.vscode/
 /src/server/test
+/src/client/test

@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #define MAX 80
+#define SA struct sockaddr
 
 void func(int connfd){
     char buff[MAX];
@@ -18,13 +19,13 @@ void func(int connfd){
 
         read(connfd, buff, sizeof(buff));
 
-        printf("%s \n", buff);
+        printf("Connfd: %d From client: %s", connfd, buff);
         
         bzero(buff, MAX);
-        n = 0;
-        while ((buff[n++] = getchar()) != '\n');
+        //n = 0;
+        //while ((buff[n++] = getchar()) != '\n');
         
-        write(connfd, buff, sizeof(buff));
+        //write(connfd, buff, sizeof(buff));
         
         if(strncmp("exit", buff, 4) == 0){
             printf("Closing server...\n");
@@ -34,24 +35,52 @@ void func(int connfd){
 }
 
 int main(){
-    int socketfd, port;
+    int sockfd, connfd, len, port;
+    struct sockaddr_in servaddr, cli;
     port = 8080;
 
-    socketfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (socketfd == -1){
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1){
         printf("Socket creation failed...\n");
         exit(0);
     } else {
         printf("Socket created successful..\n");
     }
 
-    struct sockaddr_in servaddr;
+
     bzero(&servaddr, sizeof(servaddr));
 
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servaddr.sin_port = htons(port);
 
-    close(socketfd);
+    if (bind(sockfd, (SA*)&servaddr, sizeof(servaddr)) != 0){
+        printf("Failed to bind socket.\n");
+        exit(0);
+    } else {
+        printf("Socket successful binded.\n");
+    }
+
+    
+    if ((listen(sockfd, 5)) != 0) {
+        printf("Listen failed...\n");
+        exit(0);
+    } else {
+        printf("Server listening..\n");
+    }
+
+    len = sizeof(cli);
+
+    connfd = accept(sockfd, (SA*)&cli, &len);
+    if (connfd < 0) {
+        printf("server accept failed...\n");
+        exit(0);
+    } else {
+        printf("server accept the client...\n");
+    }
+   
+    func(connfd);
+   
+    close(sockfd);
     return 0;
 }
