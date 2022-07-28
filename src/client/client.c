@@ -30,14 +30,20 @@ void func(int sockfd)
     }
 }
 
+
 int main(int argsc, char **argsv)
 {
     int sockfd, connfd, port = 8080;
     struct sockaddr_in servaddr, cli;
 
-    char args_word[MAX];
-    int i_args = 0;
+    int argsv_i = 1; // ignore ./filename
 
+    while(argsv_i != argsc){
+        if (strcmp(argsv[argsv_i++], "--port") == 0) {
+            port = atoi(argsv[argsv_i++]);
+        }
+
+    }
     // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
@@ -52,6 +58,8 @@ int main(int argsc, char **argsv)
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     servaddr.sin_port = htons(port);
+
+    printf("Connecting to port %d\n", port);
    
     // connect the client socket to server socket
     if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr)) != 0) {
